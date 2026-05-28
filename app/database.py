@@ -18,6 +18,7 @@ class Business(Base):
     sales      = relationship("Sale", back_populates="business")
     expenses   = relationship("Expense", back_populates="business")
     customers  = relationship("Customer", back_populates="business")
+    inventory = relationship("Inventory", back_populates="business")
 
 class Sale(Base):
     __tablename__ = "sales"
@@ -48,6 +49,18 @@ class Customer(Base):
     balance     = Column(Float, default=0)
     created_at  = Column(DateTime, default=datetime.utcnow)
     business    = relationship("Business", back_populates="customers")
+    
+
+class Inventory(Base):
+    __tablename__ = "inventory"
+    id          = Column(Integer, primary_key=True)
+    business_id = Column(Integer, ForeignKey("businesses.id"))
+    item        = Column(String, index=True)
+    quantity    = Column(Float, default=0)
+    unit        = Column(String, default="units")
+    min_level   = Column(Float, default=5)
+    updated_at  = Column(DateTime, default=datetime.utcnow)
+    business    = relationship("Business", back_populates="inventory")
 
 def get_db():
     db = SessionLocal()

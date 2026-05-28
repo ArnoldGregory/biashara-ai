@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from database import init_db, SessionLocal
 from ai import understand_message
 from logic import record_sale, record_expense, get_summary, check_debts
+from logic import record_sale, record_expense, get_summary, check_debts, add_stock, check_stock, low_stock
 
 load_dotenv()
 app = FastAPI(title="Biashara AI")
@@ -35,6 +36,12 @@ async def handle_message(phone: str = Form(...), message: str = Form(...)):
             reply = get_summary(db, phone, data.get("period", "today"))
         elif intent == "check_debts":
             reply = check_debts(db, phone)
+        elif intent == "add_stock":
+            reply = add_stock(db, phone, data)
+        elif intent == "check_stock":
+         reply = check_stock(db, phone)
+        elif intent == "low_stock":
+            reply = low_stock(db, phone)   
         else:
             reply = (
                 "Habari! Biashara AI 🤖\n\n"

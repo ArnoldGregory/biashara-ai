@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from database import Business, Sale, Expense, Customer, get_or_create_business
+from database import Business, Sale, Expense, Customer, Inventory, get_or_create_business
 
 def record_sale(db: Session, phone: str, data: dict) -> str:
     business = get_or_create_business(db, phone)
@@ -100,4 +100,63 @@ def check_debts(db: Session, phone: str) -> str:
     lines = [f"📋 *Wanaokudai - KES {total:,.0f} total:*\n"]
     for c in customers:
         lines.append(f"• {c.name}: KES {c.balance:,.0f}")
+    return "\n".join(lines)
+
+def add_stock(db: Session, phone: str, data: dict) -> str:
+    business = get_or_create_business(db, phone)
+    item = data.get("item", "").strip().lower()
+    quantity = float(data.get("quantity", 0))
+    unit = data.get("unit", "units")
+
+    if not item or not quantity:
+        return "❌ Please specify item and quantity. E.g: stock unga 50kg"
+
+    inv = db.query(Inventory).filter(
+        Inventory.business_id == business.id,
+        Inventory.item.ilike(f"%{item}%")
+    ).first()
+
+    if inv:
+        inv.quantity += quantity
+        inv.updated_at = datetime.utcnow()
+    else:
+        inv = Inventory(
+            business_id=business.id,
+            item=item,
+            quantity=quantity,
+            unit=unit
+        )
+        db.add(inv)
+
+    db.commit()
+    return f"✅ Stock updated!\n{item.title()}: {inv.quantity:g} {unit}"
+
+def check_stock(db: Session, phone: str) -> str:
+    business = get_or_create_business(db, phone)
+    items = db.query(Inventory).filter(
+        Inventory.business_id == business.id
+    ).order_by(Inventory.item).all()
+
+    if not items:
+        return "📦 No stock recorded yet.\nType 'stock unga 50kg' to add stock."
+
+    lines = ["📦 *Current Stock:*\n"]
+    for i in items:
+        warning = " ⚠️ LOW" if i.quantity <= i.min_level else ""
+        lines.append(f"• {i.item.title()}: {i.quantity:g} {i.unit}{warning}")
+    return "\n".join(lines)
+
+def low_stock(db: Session, phone: str) -> str:
+    business = get_or_create_business(db, phone)
+    items = db.query(Inventory).filter(
+        Inventory.business_id == business.id,
+        Inventory.quantity <= Inventory.min_level
+    ).all()
+
+    if not items:
+        return "✅ All stock levels are okay!"
+
+    lines = ["⚠️ *Low Stock Alert:*\n"]
+    for i in items:
+        lines.append(f"• {i.item.title()}: only {i.quantity:g} {i.unit} left")
     return "\n".join(lines)
