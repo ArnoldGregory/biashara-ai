@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from database import Business, Sale, Expense, Customer, Inventory, Operator, get_user_context, generate_code
+from database import Business, Sale, Expense, Customer, Inventory, Operator, get_user_context, generate_code
 
 def handle_new_user(db: Session, phone: str, message: str) -> str:
     msg = message.strip()
@@ -73,6 +74,8 @@ def record_sale(db: Session, phone: str, data: dict, operator_id=None) -> str:
             customer.balance += amount
 
     db.commit()
+    qty = float(data.get("quantity") or 1)
+    auto_deduct_stock(db, business.id, item, qty)
 
     if is_credit:
         return f"✅ {customer_name} amenunua {item} kwa mkopo - KES {amount:,.0f}"
@@ -263,3 +266,81 @@ def low_stock(db: Session, phone: str) -> str:
     for i in items:
         lines.append(f"• {i.item.title()}: only {i.quantity:g} {i.unit} left")
     return "\n".join(lines)
+
+
+def record_payment(db: Session, phone: str, data: dict) -> str:
+    role, business, op_id = get_user_context(db, phone)
+    if not business:
+        return "❌ Not registered."
+
+    customer_name = (data.get("customer") or "").strip()
+    amount = float(data.get("amount", 0))
+
+    if not customer_name or not amount:
+        return "❌ Please specify customer and amount. E.g: paid John 500"
+
+    customer = db.query(Customer).filter(
+        Customer.business_id == business.id,
+        Customer.name.ilike(f"%{customer_name}%")
+    ).first()
+
+    if not customer:
+        return f"❌ Customer '{customer_name}' not found."
+
+    if customer.balance <= 0:
+        return f"✅ {customer.name} has no outstanding debt."
+
+    old_balance = customer.balance
+    customer.balance = max(0, customer.balance - amount)
+    db.commit()
+
+    if customer.balance == 0:
+        return f"✅ {customer.name} has fully paid! 🎉\nCleared: KES {amount:,.0f}"
+    return f"✅ Payment recorded!\n{customer.name} paid KES {amount:,.0f}\nRemaining debt: KES {customer.balance:,.0f}"
+
+def business_info(db: Session, phone: str) -> str:
+    role, business, op_id = get_user_context(db, phone)
+    if not business:
+        return "❌ Not registered."
+
+    if role != "owner":
+        return (
+            f"🏪 *{business.name}*\n\n"
+            f"Your role: Operator\n"
+            f"Business code: {business.code}"
+        )
+
+    operators = db.query(Operator).filter(
+        Operator.business_id == business.id
+    ).all()
+
+    lines = [
+        f"🏪 *{business.name}*\n",
+        f"Business code: *{business.code}*",
+        f"Your phone: {phone}",
+        f"Operators: {len(operators)}\n",
+    ]
+
+    if operators:
+        lines.append("*Staff:*")
+        for op in operators:
+            lines.append(f"• {op.name} ({op.phone})")
+    else:
+        lines.append("No operators yet.")
+        lines.append(f"\nShare code *{business.code}* with staff.")
+
+    return "\n".join(lines)
+
+def auto_deduct_stock(db: Session, business_id: int, item: str, quantity: float = 1):
+    if not item:
+        return
+    # handle combined items like "unga+sugar"
+    first_item = item.split('+')[0].strip()
+    inv = db.query(Inventory).filter(
+        Inventory.business_id == business_id,
+        Inventory.item.ilike(f"%{first_item}%")
+    ).first()
+    if inv and inv.quantity > 0:
+        inv.quantity = max(0, inv.quantity - quantity)
+        inv.updated_at = datetime.utcnow()
+        db.commit()

@@ -6,7 +6,8 @@ from database import init_db, SessionLocal, get_user_context
 from ai import understand_message
 from logic import (record_sale, record_expense, get_summary,
                    check_debts, add_stock, check_stock, low_stock,
-                   handle_new_user, get_operators_summary)
+                   handle_new_user, get_operators_summary,
+                   record_payment, business_info)
 
 load_dotenv()
 app = FastAPI(title="Biashara AI")
@@ -64,6 +65,10 @@ async def handle_message(phone: str = Form(...), message: str = Form(...)):
             reply = check_stock(db, phone)
         elif intent == "low_stock":
             reply = low_stock(db, phone)
+        elif intent == "record_payment":
+            reply = record_payment(db, phone, data)
+        elif intent == "business_info":
+            reply = business_info(db, phone)
         else:
             reply = (
                 "Biashara AI 🤖\n\n"
