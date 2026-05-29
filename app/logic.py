@@ -42,7 +42,8 @@ def record_sale(db: Session, phone: str, data: dict, operator_id=None) -> str:
     if not business:
         return "❌ Not registered. Send your business name to get started."
 
-    customer_name = data.get("customer", "").strip()
+    customer_name = (data.get("customer") or "").strip()
+    # customer_name = data.get("customer", "").strip()
     is_credit = data.get("is_credit", False)
     amount = float(data.get("amount", 0))
     item = data.get("item", "item")
